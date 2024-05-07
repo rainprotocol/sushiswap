@@ -186,7 +186,7 @@
     "clean": "rm -rf .turbo && rm -rf node_modules && rm -rf dist",
     "dev": "tsc -w",
     "generate": "tsx ./scripts/generate.ts",
-    "prepublish": "npm run build",
+    "prepublishOnly": "npm run build",
     "test": "vitest run -c ./test/vitest.config.ts",
     "test:debug": "vitest --inspect-brk --no-threads run -c ./test/vitest.config.ts",
     "test:watch": "vitest dev -c ./test/vitest.config.ts"
