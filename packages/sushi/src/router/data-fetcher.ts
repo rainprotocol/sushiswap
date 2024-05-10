@@ -1,4 +1,9 @@
-import { http, PublicClient, createPublicClient } from 'viem'
+import {
+  http,
+  MulticallParameters,
+  PublicClient,
+  createPublicClient,
+} from 'viem'
 import { ChainId, TestnetChainId } from '../chain/index.js'
 import { publicClientConfig } from '../config/index.js'
 import { Type } from '../currency/index.js'
@@ -60,8 +65,10 @@ export type DataFetcherOptions = {
    * price, etc of a certain block
    */
   blockNumber?: bigint
-  /** Determines if memoizer should be used or not */
-  memoize?: boolean
+  /** The multicall memoizer function, must be initiated from a viem client multicall method */
+  multicallMemoizer?: (
+    args: MulticallParameters<readonly unknown[], boolean>,
+  ) => Promise<Promise<unknown[]>>
   /** Determines a timeout (in ms) for fetching pools for a token pair */
   fetchPoolsTimeout?: number
 }

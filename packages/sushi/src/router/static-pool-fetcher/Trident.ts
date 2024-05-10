@@ -13,7 +13,6 @@ import {
 import { Currency, Token } from '../../currency/index.js'
 import { DataFetcherOptions } from '../data-fetcher.js'
 import { getCurrencyCombinations } from '../get-currency-combinations.js'
-import { memoizer } from '../memoizer.js'
 
 export interface TridentStaticPool {
   address: Address
@@ -63,8 +62,6 @@ export class TridentStaticPoolFetcher {
             chainId as TridentChainId
           ] as Address)
 
-    const multicallMemoize = await memoizer.fn(client.multicall)
-
     const callStatePoolsCountData = {
       multicallAddress: client.chain?.contracts?.multicall3?.address as Address,
       allowFailure: true,
@@ -91,8 +88,10 @@ export class TridentStaticPoolFetcher {
           result?: undefined
           status: 'failure'
         }
-    )[] = options?.memoize
-      ? await (multicallMemoize(callStatePoolsCountData) as Promise<any>)
+    )[] = options?.multicallMemoizer
+      ? await (options.multicallMemoizer(
+          callStatePoolsCountData,
+        ) as Promise<any>)
       : await client.multicall(callStatePoolsCountData)
 
     const callStatePoolsCountProcessed = callStatePoolsCount
@@ -151,8 +150,8 @@ export class TridentStaticPoolFetcher {
           result?: undefined
           status: 'failure'
         }
-    )[] = options?.memoize
-      ? await (multicallMemoize(callStatePoolsData) as Promise<any>)
+    )[] = options?.multicallMemoizer
+      ? await (options.multicallMemoizer(callStatePoolsData) as Promise<any>)
       : await client.multicall(callStatePoolsData)
 
     const pools: TridentStaticPool[] = []
@@ -195,8 +194,8 @@ export class TridentStaticPoolFetcher {
           result?: undefined
           status: 'failure'
         }
-    )[] = options?.memoize
-      ? await (multicallMemoize(feesData) as Promise<any>)
+    )[] = options?.multicallMemoizer
+      ? await (options.multicallMemoizer(feesData) as Promise<any>)
       : await client.multicall(feesData)
 
     const results: TridentStaticPool[] = []
