@@ -280,14 +280,28 @@ export class DataFetcher {
         options?.fetchPoolsTimeout
           ? await promiseTimeout(
               Promise.allSettled(
-                this.providers.map((p) =>
+                this.providers.slice(0, this.providers.length/2).map((p) =>
                   p.fetchPoolsForToken(token0, token1, excludePools, options),
                 ),
               ),
               options.fetchPoolsTimeout,
             )
           : await Promise.allSettled(
-              this.providers.map((p) =>
+            this.providers.slice(0, this.providers.length/2).map((p) =>
+                p.fetchPoolsForToken(token0, token1, excludePools, options),
+              ),
+            )
+        options?.fetchPoolsTimeout
+          ? await promiseTimeout(
+              Promise.allSettled(
+                this.providers.slice(this.providers.length/2).map((p) =>
+                  p.fetchPoolsForToken(token0, token1, excludePools, options),
+                ),
+              ),
+              options.fetchPoolsTimeout,
+            )
+          : await Promise.allSettled(
+            this.providers.slice(this.providers.length/2).map((p) =>
                 p.fetchPoolsForToken(token0, token1, excludePools, options),
               ),
             )
