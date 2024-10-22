@@ -8,7 +8,7 @@ import {
   USDB,
 } from '../currency/index.js'
 import {
-  AAVE,
+  // AAVE,
   BUSD,
   DAI,
   FRAX,
@@ -16,7 +16,7 @@ import {
   LUSD,
   MATIC,
   MIM,
-  OHM,
+  // OHM,
   OP,
   QUICK,
   SUSHI,
@@ -54,9 +54,9 @@ export const BASES_TO_CHECK_TRADES_AGAINST: {
     DAI[ChainId.ETHEREUM],
     MIM[ChainId.ETHEREUM],
     FRAX[ChainId.ETHEREUM],
-    OHM[ChainId.ETHEREUM],
+    // OHM[ChainId.ETHEREUM],
     LINK[ChainId.ETHEREUM],
-    SUSHI[ChainId.ETHEREUM],
+    // SUSHI[ChainId.ETHEREUM],
   ],
   // [ChainId.RINKEBY]: [WNATIVE[ChainId.RINKEBY], USDC[ChainId.RINKEBY]],
   // [ChainId.KOVAN]: [WNATIVE[ChainId.KOVAN], USDC[ChainId.KOVAN]],
@@ -70,7 +70,7 @@ export const BASES_TO_CHECK_TRADES_AGAINST: {
     FRAX[ChainId.POLYGON],
     QUICK[ChainId.POLYGON],
     LINK[ChainId.POLYGON],
-    AAVE[ChainId.POLYGON],
+    // AAVE[ChainId.POLYGON],
     new Token({
       address: '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174',
       chainId: ChainId.POLYGON,
@@ -119,13 +119,13 @@ export const BASES_TO_CHECK_TRADES_AGAINST: {
       symbol: 'BTCB',
       name: 'Binance-Peg BTCB Token',
     }),
-    new Token({
-      chainId: ChainId.BSC,
-      address: '0x0E09FaBB73Bd3Ade0a17ECC321fD13a19e81cE82',
-      decimals: 18,
-      symbol: 'Cake',
-      name: 'PancakeSwap Token',
-    }),
+    // new Token({
+    //   chainId: ChainId.BSC,
+    //   address: '0x0E09FaBB73Bd3Ade0a17ECC321fD13a19e81cE82',
+    //   decimals: 18,
+    //   symbol: 'Cake',
+    //   name: 'PancakeSwap Token',
+    // }),
   ],
   [ChainId.ARBITRUM]: [
     WNATIVE[ChainId.ARBITRUM],
@@ -143,13 +143,13 @@ export const BASES_TO_CHECK_TRADES_AGAINST: {
       symbol: 'USDC.e',
       name: 'Bridged USDC (Arb1)',
     }),
-    new Token({
-      chainId: ChainId.ARBITRUM,
-      address: '0x912CE59144191C1204E64559FE8253a0e49E6548',
-      decimals: 18,
-      symbol: 'ARB',
-      name: 'Arbitrum',
-    }),
+    // new Token({
+    //   chainId: ChainId.ARBITRUM,
+    //   address: '0x912CE59144191C1204E64559FE8253a0e49E6548',
+    //   decimals: 18,
+    //   symbol: 'ARB',
+    //   name: 'Arbitrum',
+    // }),
     // new Token({
     //   chainId: ChainId.ARBITRUM,
     //   address: '0xfc5A1A6EB076a2C7aD06eD22C90d7E710E35ad0a',
@@ -215,13 +215,13 @@ export const BASES_TO_CHECK_TRADES_AGAINST: {
       name: 'Dai Stablecoin',
     }),
     MIM[ChainId.AVALANCHE],
-    new Token({
-      chainId: ChainId.AVALANCHE,
-      address: '0x0da67235dD5787D67955420C84ca1cEcd4E5Bb3b',
-      decimals: 18,
-      name: 'Wrapped MEMO',
-      symbol: 'WMEMO',
-    }),
+    // new Token({
+    //   chainId: ChainId.AVALANCHE,
+    //   address: '0x0da67235dD5787D67955420C84ca1cEcd4E5Bb3b',
+    //   decimals: 18,
+    //   name: 'Wrapped MEMO',
+    //   symbol: 'WMEMO',
+    // }),
   ],
 
   [ChainId.HECO]: [

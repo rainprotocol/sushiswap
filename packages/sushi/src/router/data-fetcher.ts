@@ -277,34 +277,23 @@ export class DataFetcher {
           ? [currency0.wrapped, currency1.wrapped]
           : [currency1.wrapped, currency0.wrapped]
       try {
-        options?.fetchPoolsTimeout
-          ? await promiseTimeout(
-              Promise.allSettled(
-                this.providers.slice(0, this.providers.length/2).map((p) =>
+        const len = (this.providers.length / 3) > 1 ? 3 : (this.providers.length / 2) > 1 ? 2: this.providers.length
+        for (let i = 0; i < len; i++) {
+          options?.fetchPoolsTimeout
+            ? await promiseTimeout(
+                Promise.allSettled(
+                  this.providers.slice(len * i, len * (i + 1)).map((p) =>
+                    p.fetchPoolsForToken(token0, token1, excludePools, options),
+                  ),
+                ),
+                options.fetchPoolsTimeout,
+              )
+            : await Promise.allSettled(
+              this.providers.slice(len * i, len * (i + 1)).map((p) =>
                   p.fetchPoolsForToken(token0, token1, excludePools, options),
                 ),
-              ),
-              options.fetchPoolsTimeout,
-            )
-          : await Promise.allSettled(
-            this.providers.slice(0, this.providers.length/2).map((p) =>
-                p.fetchPoolsForToken(token0, token1, excludePools, options),
-              ),
-            )
-        options?.fetchPoolsTimeout
-          ? await promiseTimeout(
-              Promise.allSettled(
-                this.providers.slice(this.providers.length/2).map((p) =>
-                  p.fetchPoolsForToken(token0, token1, excludePools, options),
-                ),
-              ),
-              options.fetchPoolsTimeout,
-            )
-          : await Promise.allSettled(
-            this.providers.slice(this.providers.length/2).map((p) =>
-                p.fetchPoolsForToken(token0, token1, excludePools, options),
-              ),
-            )
+              )
+        }
       } catch {
         /**/
       }
