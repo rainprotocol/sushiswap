@@ -104,14 +104,14 @@ export function findMultiRouteExactIn(
     // if (g.findBestPathExactIn(from, to, amountIn/100 + 10_000, 0)?.gasSpent === 0) return outSingle
     g.cleanTmpData()
 
-    const bestFlowNumber = calcBestFlowNumber(
-      outSingle,
-      amountIn,
-      g.getVert(from)?.gasPrice,
-    )
-    if (bestFlowNumber === 1) return outSingle
+    // const bestFlowNumber = calcBestFlowNumber(
+    //   outSingle,
+    //   amountIn,
+    //   g.getVert(from)?.gasPrice,
+    // )
+    // if (bestFlowNumber === 1) return outSingle
 
-    const outMulti = g.findBestRouteExactIn(from, to, amountIn, bestFlowNumber)
+    const outMulti = g.findBestRouteExactIn(from, to, amountIn, 6)
     return getBetterRouteExactIn(outSingle, outMulti)
   } catch (_e) {
     return NoWayMultiRoute(from, to)
