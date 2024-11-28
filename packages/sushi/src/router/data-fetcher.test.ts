@@ -13,7 +13,7 @@ describe('DataFetcher Indexer', async () => {
     const oldBlockNumber = 64816756n
     const fromToken = USDT[ChainId.POLYGON]
     const toToken = USDC[ChainId.POLYGON]
-    const amountIn = 10_000_000n // 10e6, ie 10 USDC
+    const amountIn = 10_000_000n // 10e6, ie 10 USDT
     const gasPrice = 30_000_000
     // one of each type
     const lps = [
