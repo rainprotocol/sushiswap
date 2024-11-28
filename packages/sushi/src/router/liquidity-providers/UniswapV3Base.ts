@@ -1043,14 +1043,6 @@ export abstract class UniswapV3BaseProvider extends LiquidityProvider {
       pool.tickSpacing,
     )
 
-    // if (updateAll) {
-    //   // the only case when inactual words are removed
-    //   Array.from(this.words.keys()).forEach((index) => {
-    //     if (index < minWord || index > maxWord) this.words.delete(index)
-    //   })
-    //   this.emit('ticksChanged')
-    // }
-
     const direction = currentTickWord - minWord <= maxWord - currentTickWord
     const wordNumber = maxWord - minWord
     const newTicks: number[] = []
