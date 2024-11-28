@@ -358,6 +358,189 @@ export abstract class UniswapV3BaseProvider extends LiquidityProvider {
     })
   }
 
+  async fetchPoolsForToken(
+    t0: Token,
+    t1: Token,
+    excludePools?: Set<string> | PoolFilter,
+    options?: DataFetcherOptions,
+  ): Promise<void> {
+    const existingPools = await this.fetchPoolData(
+      t0,
+      t1,
+      excludePools,
+      options,
+    )
+    if (existingPools.length === 0) return
+
+    const [liquidity, reserves, ticks] = await Promise.all([
+      this.getLiquidity(existingPools, options),
+      this.getReserves(existingPools, options),
+      this.getTicks(existingPools, options),
+    ])
+    existingPools.forEach((pool, i) => {
+      if (
+        liquidity === undefined ||
+        reserves === undefined ||
+        ticks === undefined
+      )
+        return
+      if (
+        liquidity[i] === undefined ||
+        reserves[i] === undefined ||
+        ticks[i] === undefined
+      )
+        return
+      this.innerPools.set(pool.address.toLowerCase(), {
+        ...pool,
+        reserve0: reserves[i]![0],
+        reserve1: reserves[i]![1],
+        liquidity: liquidity[i]!,
+        ticks: ticks[i]!,
+      })
+    })
+  }
+
+  getStaticPools(t1: Token, t2: Token): StaticPoolUniV3[] {
+    const currencyCombinations = getCurrencyCombinations(this.chainId, t1, t2)
+
+    const allCurrencyCombinationsWithAllFees: [Type, Type, number][] =
+      currencyCombinations.reduce<[Currency, Currency, number][]>(
+        (list, [tokenA, tokenB]) => {
+          if (tokenA !== undefined && tokenB !== undefined) {
+            return list.concat([
+              [tokenA, tokenB, this.FEE.LOWEST],
+              [tokenA, tokenB, this.FEE.LOW],
+              [tokenA, tokenB, this.FEE.MEDIUM],
+              [tokenA, tokenB, this.FEE.HIGH],
+            ])
+          }
+          return []
+        },
+        [],
+      )
+
+    const filtered: [Token, Token, number][] = []
+    allCurrencyCombinationsWithAllFees.forEach(
+      ([currencyA, currencyB, feeAmount]) => {
+        if (currencyA && currencyB && feeAmount) {
+          const tokenA = currencyA.wrapped
+          const tokenB = currencyB.wrapped
+          if (tokenA.equals(tokenB)) return
+          filtered.push(
+            tokenA.sortsBefore(tokenB)
+              ? [tokenA, tokenB, feeAmount]
+              : [tokenB, tokenA, feeAmount],
+          )
+        }
+      },
+    )
+    return filtered.map(([currencyA, currencyB, fee]) => ({
+      address: computeSushiSwapV3PoolAddress({
+        factoryAddress:
+          this.factory[this.chainId as keyof typeof this.factory]!,
+        tokenA: currencyA.wrapped,
+        tokenB: currencyB.wrapped,
+        fee,
+        initCodeHashManualOverride:
+          this.initCodeHash[this.chainId as keyof typeof this.initCodeHash],
+      }) as Address,
+      token0: currencyA,
+      token1: currencyB,
+      fee,
+    }))
+  }
+
+  startFetchPoolsData() {
+    this.stopFetchPoolsData()
+    // this.topPools = new Map()
+    // this.unwatchBlockNumber = this.client.watchBlockNumber({
+    //   onBlockNumber: (blockNumber) => {
+    //     this.lastUpdateBlock = Number(blockNumber)
+    //     // if (!this.isInitialized) {
+    //     //   this.initialize()
+    //     // } else {
+    //     //   this.updatePools()
+    //     // }
+    //   },
+    //   onError: (error) => {
+    //     console.error(
+    //       `${this.getLogPrefix()} - Error watching block number: ${
+    //         error.message
+    //       }`,
+    //     )
+    //   },
+    // })
+  }
+
+  getCurrentPoolList(t0: Token, t1: Token): PoolCode[] {
+    const tradeId = this.getTradeId(t0, t1)
+    const poolsByTrade = this.poolsByTrade.get(tradeId) ?? []
+    // return poolsByTrade
+    //   ? Array.from(this.pools)
+    //       .filter(([poolAddress]) => poolsByTrade.includes(poolAddress))
+    //       .map(([, p]) => p)
+    //   : []
+    return Array.from(this.innerPools.values())
+      .filter((pool) => poolsByTrade.includes(pool.address.toLowerCase()))
+      .map((pool) => {
+        const v3Pool = new UniV3Pool(
+          pool.address,
+          pool.token0 as RToken,
+          pool.token1 as RToken,
+          pool.fee / 1_000_000,
+          pool.reserve0,
+          pool.reserve1,
+          pool.activeTick,
+          pool.liquidity,
+          pool.sqrtPriceX96,
+          this.getMaxTickDiapason(pool.activeTick, pool),
+        )
+
+        return new UniV3PoolCode(
+          v3Pool,
+          this.getType(),
+          this.getPoolProviderName(),
+        )
+      })
+    // return Array.from(this.pools.values())
+  }
+
+  stopFetchPoolsData() {
+    if (this.unwatchBlockNumber) this.unwatchBlockNumber()
+    this.blockListener = undefined
+  }
+
+  async ensureFeeAndTicks(): Promise<boolean> {
+    const feeList = [
+      this.FEE.LOWEST,
+      this.FEE.LOW,
+      this.FEE.MEDIUM,
+      this.FEE.HIGH,
+    ] as number[]
+    const results = (await this.client.multicall({
+      multicallAddress: this.client.chain?.contracts?.multicall3
+        ?.address as Address,
+      allowFailure: false,
+      contracts: feeList.map(
+        (fee) =>
+          ({
+            chainId: this.chainId,
+            address: this.factory[this.chainId as keyof typeof this.factory]!,
+            abi: uniswapV3FactoryAbi,
+            functionName: 'feeAmountTickSpacing',
+            args: [fee],
+          }) as const,
+      ),
+    })) as number[]
+
+    // fetched fee map to ticks should match correctly with hardcoded literals in the dex
+    // a tick can be 0 if there is no pools deployed with that fee yet
+    return results.every(
+      (v, i) =>
+        this.TICK_SPACINGS[feeList[i] as SushiSwapV3FeeAmount] === v || v === 0,
+    )
+  }
+
   async getReserves(
     existingPools: V3Pool[],
     options?: DataFetcherOptions,
@@ -600,189 +783,6 @@ export abstract class UniswapV3BaseProvider extends LiquidityProvider {
       )
     })
     return poolTicks
-  }
-
-  async fetchPoolsForToken(
-    t0: Token,
-    t1: Token,
-    excludePools?: Set<string> | PoolFilter,
-    options?: DataFetcherOptions,
-  ): Promise<void> {
-    const existingPools = await this.fetchPoolData(
-      t0,
-      t1,
-      excludePools,
-      options,
-    )
-    if (existingPools.length === 0) return
-
-    const [liquidity, reserves, ticks] = await Promise.all([
-      this.getLiquidity(existingPools, options),
-      this.getReserves(existingPools, options),
-      this.getTicks(existingPools, options),
-    ])
-    existingPools.forEach((pool, i) => {
-      if (
-        liquidity === undefined ||
-        reserves === undefined ||
-        ticks === undefined
-      )
-        return
-      if (
-        liquidity[i] === undefined ||
-        reserves[i] === undefined ||
-        ticks[i] === undefined
-      )
-        return
-      this.innerPools.set(pool.address.toLowerCase(), {
-        ...pool,
-        reserve0: reserves[i]![0],
-        reserve1: reserves[i]![1],
-        liquidity: liquidity[i]!,
-        ticks: ticks[i]!,
-      })
-    })
-  }
-
-  getStaticPools(t1: Token, t2: Token): StaticPoolUniV3[] {
-    const currencyCombinations = getCurrencyCombinations(this.chainId, t1, t2)
-
-    const allCurrencyCombinationsWithAllFees: [Type, Type, number][] =
-      currencyCombinations.reduce<[Currency, Currency, number][]>(
-        (list, [tokenA, tokenB]) => {
-          if (tokenA !== undefined && tokenB !== undefined) {
-            return list.concat([
-              [tokenA, tokenB, this.FEE.LOWEST],
-              [tokenA, tokenB, this.FEE.LOW],
-              [tokenA, tokenB, this.FEE.MEDIUM],
-              [tokenA, tokenB, this.FEE.HIGH],
-            ])
-          }
-          return []
-        },
-        [],
-      )
-
-    const filtered: [Token, Token, number][] = []
-    allCurrencyCombinationsWithAllFees.forEach(
-      ([currencyA, currencyB, feeAmount]) => {
-        if (currencyA && currencyB && feeAmount) {
-          const tokenA = currencyA.wrapped
-          const tokenB = currencyB.wrapped
-          if (tokenA.equals(tokenB)) return
-          filtered.push(
-            tokenA.sortsBefore(tokenB)
-              ? [tokenA, tokenB, feeAmount]
-              : [tokenB, tokenA, feeAmount],
-          )
-        }
-      },
-    )
-    return filtered.map(([currencyA, currencyB, fee]) => ({
-      address: computeSushiSwapV3PoolAddress({
-        factoryAddress:
-          this.factory[this.chainId as keyof typeof this.factory]!,
-        tokenA: currencyA.wrapped,
-        tokenB: currencyB.wrapped,
-        fee,
-        initCodeHashManualOverride:
-          this.initCodeHash[this.chainId as keyof typeof this.initCodeHash],
-      }) as Address,
-      token0: currencyA,
-      token1: currencyB,
-      fee,
-    }))
-  }
-
-  startFetchPoolsData() {
-    this.stopFetchPoolsData()
-    // this.topPools = new Map()
-    // this.unwatchBlockNumber = this.client.watchBlockNumber({
-    //   onBlockNumber: (blockNumber) => {
-    //     this.lastUpdateBlock = Number(blockNumber)
-    //     // if (!this.isInitialized) {
-    //     //   this.initialize()
-    //     // } else {
-    //     //   this.updatePools()
-    //     // }
-    //   },
-    //   onError: (error) => {
-    //     console.error(
-    //       `${this.getLogPrefix()} - Error watching block number: ${
-    //         error.message
-    //       }`,
-    //     )
-    //   },
-    // })
-  }
-
-  getCurrentPoolList(t0: Token, t1: Token): PoolCode[] {
-    const tradeId = this.getTradeId(t0, t1)
-    const poolsByTrade = this.poolsByTrade.get(tradeId) ?? []
-    // return poolsByTrade
-    //   ? Array.from(this.pools)
-    //       .filter(([poolAddress]) => poolsByTrade.includes(poolAddress))
-    //       .map(([, p]) => p)
-    //   : []
-    return Array.from(this.innerPools.values())
-      .filter((pool) => poolsByTrade.includes(pool.address.toLowerCase()))
-      .map((pool) => {
-        const v3Pool = new UniV3Pool(
-          pool.address,
-          pool.token0 as RToken,
-          pool.token1 as RToken,
-          pool.fee / 1_000_000,
-          pool.reserve0,
-          pool.reserve1,
-          pool.activeTick,
-          pool.liquidity,
-          pool.sqrtPriceX96,
-          this.getMaxTickDiapason(pool.activeTick, pool),
-        )
-
-        return new UniV3PoolCode(
-          v3Pool,
-          this.getType(),
-          this.getPoolProviderName(),
-        )
-      })
-    // return Array.from(this.pools.values())
-  }
-
-  stopFetchPoolsData() {
-    if (this.unwatchBlockNumber) this.unwatchBlockNumber()
-    this.blockListener = undefined
-  }
-
-  async ensureFeeAndTicks(): Promise<boolean> {
-    const feeList = [
-      this.FEE.LOWEST,
-      this.FEE.LOW,
-      this.FEE.MEDIUM,
-      this.FEE.HIGH,
-    ] as number[]
-    const results = (await this.client.multicall({
-      multicallAddress: this.client.chain?.contracts?.multicall3
-        ?.address as Address,
-      allowFailure: false,
-      contracts: feeList.map(
-        (fee) =>
-          ({
-            chainId: this.chainId,
-            address: this.factory[this.chainId as keyof typeof this.factory]!,
-            abi: uniswapV3FactoryAbi,
-            functionName: 'feeAmountTickSpacing',
-            args: [fee],
-          }) as const,
-      ),
-    })) as number[]
-
-    // fetched fee map to ticks should match correctly with hardcoded literals in the dex
-    // a tick can be 0 if there is no pools deployed with that fee yet
-    return results.every(
-      (v, i) =>
-        this.TICK_SPACINGS[feeList[i] as SushiSwapV3FeeAmount] === v || v === 0,
-    )
   }
 
   override processLog(log: Log) {
