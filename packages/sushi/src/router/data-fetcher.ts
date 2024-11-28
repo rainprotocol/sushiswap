@@ -371,6 +371,7 @@ export class DataFetcher {
       }
     })
     if (!addresses.length) return
+    if (fromBlock === untilBlock) return
 
     // get logs and sort them from earliest block to latest
     const logs = await this.web3Client.getLogs({
