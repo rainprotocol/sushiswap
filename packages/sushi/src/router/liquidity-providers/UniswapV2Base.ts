@@ -268,23 +268,6 @@ export abstract class UniswapV2BaseProvider extends LiquidityProvider {
         existingPool === undefined &&
         (!nonExistentPool || nonExistentPool < 2)
       ) {
-        // const token0 = pool.token0 as RToken
-        // const token1 = pool.token1 as RToken
-        // this.innerPools.set(pool.address.toLowerCase(), pool)
-
-        // const rPool = new ConstantProductRPool(
-        //   pool.address,
-        //   token0,
-        //   token1,
-        //   'fee' in pool ? pool.fee : this.fee,
-        //   0n,
-        //   0n,
-        // )
-        // const pc = new ConstantProductPoolCode(
-        //   rPool,
-        //   this.getType(),
-        //   this.getPoolProviderName(),
-        // )
         poolCodesToCreate.push({
           ...pool,
           blockNumber: options?.blockNumber ?? 0n,
@@ -315,8 +298,6 @@ export abstract class UniswapV2BaseProvider extends LiquidityProvider {
           reserve0: res0,
           reserve1: res1,
         })
-        // pool.updateReserves(res0, res1)
-        // this.onDemandPools.set(pool.address.toLowerCase() as `0x${string}`, { poolCode, validUntilTimestamp })
         // console.debug(
         //   `${this.getLogPrefix()} - ON DEMAND CREATION: ${pool.address} (${pool.token0.symbol}/${pool.token1.symbol})`
         // )

@@ -218,12 +218,7 @@ export abstract class AlgebraV1BaseProvider extends UniswapV3BaseProvider {
       if (this.innerPools.has(poolAddress)) return
       if (this.nonExistentPools.get(poolAddress) ?? 0 > 1) return
       if (globalState === undefined || !globalState[i]) {
-        const v = this.nonExistentPools.get(poolAddress)
-        if (v) {
-          this.nonExistentPools.set(poolAddress, v + 1)
-        } else {
-          this.nonExistentPools.set(poolAddress, 1)
-        }
+        this.handleNonExistentPool(poolAddress)
         return
       }
       let thisPoolTickSpacing = this.DEFAULT_TICK_SPACING
@@ -240,32 +235,17 @@ export abstract class AlgebraV1BaseProvider extends UniswapV3BaseProvider {
       const sqrtPriceX96 = globalState[i]!.result?.[0] // price
       const tick = globalState[i]!.result?.[1] // tick
       if (!sqrtPriceX96 || sqrtPriceX96 === 0n || typeof tick !== 'number') {
-        const v = this.nonExistentPools.get(poolAddress)
-        if (v) {
-          this.nonExistentPools.set(poolAddress, v + 1)
-        } else {
-          this.nonExistentPools.set(poolAddress, 1)
-        }
+        this.handleNonExistentPool(poolAddress)
         return
       }
       const fee = globalState[i]!.result?.[2] // fee
       if (!fee) {
-        const v = this.nonExistentPools.get(poolAddress)
-        if (v) {
-          this.nonExistentPools.set(poolAddress, v + 1)
-        } else {
-          this.nonExistentPools.set(poolAddress, 1)
-        }
+        this.handleNonExistentPool(poolAddress)
         return
       }
       const activeTick = this.getActiveTick(tick, thisPoolTickSpacing)
       if (typeof activeTick !== 'number') {
-        const v = this.nonExistentPools.get(poolAddress)
-        if (v) {
-          this.nonExistentPools.set(poolAddress, v + 1)
-        } else {
-          this.nonExistentPools.set(poolAddress, 1)
-        }
+        this.handleNonExistentPool(poolAddress)
         return
       }
       this.TICK_SPACINGS[poolAddress] = thisPoolTickSpacing
