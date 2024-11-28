@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { DataFetcher } from './data-fetcher.js'
 import { ChainId } from '../chain/constants.js'
+import { ROUTE_PROCESSOR_4_ADDRESS } from '../config/route-processor.js'
 import { USDC, WNATIVE } from '../currency/tokens.js'
+import { DataFetcher } from './data-fetcher.js'
 import { LiquidityProviders } from './liquidity-providers/index.js'
 import { Router } from './router.js'
-import { ROUTE_PROCESSOR_4_ADDRESS } from '../config/route-processor.js'
 
 describe('DataFetcher Indexer', async () => {
   it('should correctly update pools data by logs', async () => {
@@ -17,9 +17,9 @@ describe('DataFetcher Indexer', async () => {
     const gasPrice = 30_000_000
     // one of each type
     const lps = [
-        LiquidityProviders.UniswapV3,   // univ3
-        LiquidityProviders.QuickSwapV3, // algebra
-        LiquidityProviders.QuickSwapV2, // univ2
+      LiquidityProviders.UniswapV3, // univ3
+      LiquidityProviders.QuickSwapV3, // algebra
+      LiquidityProviders.QuickSwapV2, // univ2
     ]
 
     // data fetcher without indexer (normal way ie raw pool data fecthed directly by contract calls)
@@ -33,55 +33,68 @@ describe('DataFetcher Indexer', async () => {
     dataFectherIndexer.stopDataFetching()
 
     // get token pools data for current block on fresh dataFetcher
-    await dataFectherFresh.fetchPoolsForToken(fromToken, toToken, undefined, { blockNumber: currentBlockNumber })
-    const freshPcMap = dataFectherFresh.getCurrentPoolCodeMap(fromToken, toToken)
+    await dataFectherFresh.fetchPoolsForToken(fromToken, toToken, undefined, {
+      blockNumber: currentBlockNumber,
+    })
+    const freshPcMap = dataFectherFresh.getCurrentPoolCodeMap(
+      fromToken,
+      toToken,
+    )
     const freshRoute = Router.findBestRoute(
-        freshPcMap,
-        ChainId.POLYGON,
-        fromToken,
-        amountIn,
-        toToken,
-        gasPrice,
-        lps,
-        undefined,
-        undefined,
-        'single',
+      freshPcMap,
+      ChainId.POLYGON,
+      fromToken,
+      amountIn,
+      toToken,
+      gasPrice,
+      lps,
+      undefined,
+      undefined,
+      'single',
     )
 
-    // get token pools data for older block on indexer dataFetcher, then ensure the 
+    // get token pools data for older block on indexer dataFetcher, then ensure the
     // amount out it gives is different to fresh datafetcher amount out
     // and then update the pools data with contract logs from between the blocks
-    await dataFectherIndexer.fetchPoolsForToken(fromToken, toToken, undefined, { blockNumber: oldBlockNumber })
-    const indexerPcMapOld = dataFectherIndexer.getCurrentPoolCodeMap(fromToken, toToken)
+    await dataFectherIndexer.fetchPoolsForToken(fromToken, toToken, undefined, {
+      blockNumber: oldBlockNumber,
+    })
+    const indexerPcMapOld = dataFectherIndexer.getCurrentPoolCodeMap(
+      fromToken,
+      toToken,
+    )
     const indexerRouteOld = Router.findBestRoute(
-        indexerPcMapOld,
-        ChainId.POLYGON,
-        fromToken,
-        amountIn,
-        toToken,
-        gasPrice,
-        lps,
-        undefined,
-        undefined,
-        'single',
+      indexerPcMapOld,
+      ChainId.POLYGON,
+      fromToken,
+      amountIn,
+      toToken,
+      gasPrice,
+      lps,
+      undefined,
+      undefined,
+      'single',
     )
     // should not be equal (just to make sure)
     expect(freshRoute.amountOutBI).not.equal(indexerRouteOld.amountOutBI)
 
     // now update the indexer pools data with logs
     await dataFectherIndexer.updateCachedPools(currentBlockNumber)
-    const indexerPcMap = dataFectherIndexer.getCurrentPoolCodeMap(fromToken, toToken)
+    const indexerPcMap = dataFectherIndexer.getCurrentPoolCodeMap(
+      fromToken,
+      toToken,
+    )
     const indexerRoute = Router.findBestRoute(
-        indexerPcMap,
-        ChainId.POLYGON,
-        fromToken,
-        amountIn,
-        toToken,
-        gasPrice,
-        lps,
-        undefined,
-        undefined,
-        'single',
+      indexerPcMap,
+      ChainId.POLYGON,
+      fromToken,
+      amountIn,
+      toToken,
+      gasPrice,
+      lps,
+      undefined,
+      undefined,
+      'single',
     )
 
     // assert amount outs and status
@@ -91,21 +104,21 @@ describe('DataFetcher Indexer', async () => {
 
     // assert produced route code
     const freshRpParams = Router.routeProcessor4Params(
-        freshPcMap,
-        freshRoute,
-        fromToken,
-        toToken,
-        ROUTE_PROCESSOR_4_ADDRESS[ChainId.POLYGON],
-        ROUTE_PROCESSOR_4_ADDRESS[ChainId.POLYGON],
-    );
+      freshPcMap,
+      freshRoute,
+      fromToken,
+      toToken,
+      ROUTE_PROCESSOR_4_ADDRESS[ChainId.POLYGON],
+      ROUTE_PROCESSOR_4_ADDRESS[ChainId.POLYGON],
+    )
     const indexerRpParams = Router.routeProcessor4Params(
-        indexerPcMap,
-        indexerRoute,
-        fromToken,
-        toToken,
-        ROUTE_PROCESSOR_4_ADDRESS[ChainId.POLYGON],
-        ROUTE_PROCESSOR_4_ADDRESS[ChainId.POLYGON],
-    );
+      indexerPcMap,
+      indexerRoute,
+      fromToken,
+      toToken,
+      ROUTE_PROCESSOR_4_ADDRESS[ChainId.POLYGON],
+      ROUTE_PROCESSOR_4_ADDRESS[ChainId.POLYGON],
+    )
     expect(freshRpParams.routeCode).toEqual(indexerRpParams.routeCode)
   })
 })
