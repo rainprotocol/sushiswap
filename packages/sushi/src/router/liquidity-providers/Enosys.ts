@@ -71,6 +71,9 @@ export class EnosysProvider extends UniswapV2BaseProvider {
         token0: combination[0]!,
         token1: combination[1]!,
         fee: this.fee,
+        reserve0: 0n,
+        reserve1: 0n,
+        blockNumber: 0n,
       }))
     })
   }

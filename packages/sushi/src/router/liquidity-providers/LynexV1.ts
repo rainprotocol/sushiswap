@@ -136,6 +136,9 @@ export class LynexV1Provider extends UniswapV2BaseProvider {
         token1: combination[1]!,
         // set fee for stable and volatile
         fee: i === 0 ? this.STABLE_FEE : this.VOLATILE_FEE,
+        reserve0: 0n,
+        reserve1: 0n,
+        blockNumber: 0n,
       }))
     })
   }

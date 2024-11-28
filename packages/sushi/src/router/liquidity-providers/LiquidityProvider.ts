@@ -1,4 +1,4 @@
-import { PublicClient } from 'viem'
+import { Log, PublicClient } from 'viem'
 import { ChainId, chainShortName } from '../../chain/index.js'
 import type { Token } from '../../currency/index.js'
 import { DataFetcherOptions } from '../data-fetcher.js'
@@ -130,6 +130,9 @@ export abstract class LiquidityProvider {
     [t0.address.toLowerCase(), t1.address.toLowerCase()]
       .sort((first, second) => (first > second ? -1 : 1))
       .join(':')
+
+  processLog(_log: Log) {}
+  async afterProcessLog() {}
 }
 
 export const UniV2LiquidityProviders: LiquidityProviders[] = [
@@ -160,7 +163,7 @@ export const UniV2LiquidityProviders: LiquidityProviders[] = [
   LiquidityProviders.DyorV2,
   LiquidityProviders.HyperBlast,
   LiquidityProviders.KinetixV2,
-  LiquidityProviders.Camelot,
+  // LiquidityProviders.Camelot,
   LiquidityProviders.Enosys,
   LiquidityProviders.BlazeSwap,
   LiquidityProviders.LynexV1,
