@@ -361,14 +361,14 @@ export abstract class AlgebraV1BaseProvider extends UniswapV3BaseProvider {
                   pool.reserve0 += amount0
                   pool.reserve1 += amount1
                 }
-              }
-              if (
-                tickLower !== undefined &&
-                tickUpper !== undefined &&
-                amount
-              ) {
-                this.addTick(tickLower, amount, pool)
-                this.addTick(tickUpper, -amount, pool)
+                if (
+                  tickLower !== undefined &&
+                  tickUpper !== undefined &&
+                  amount
+                ) {
+                  this.addTick(tickLower, amount, pool)
+                  this.addTick(tickUpper, -amount, pool)
+                }
               }
               break
             }
@@ -386,14 +386,14 @@ export abstract class AlgebraV1BaseProvider extends UniswapV3BaseProvider {
                   if (tickLower <= tick && tick < tickUpper)
                     pool.liquidity -= amount
                 }
-              }
-              if (
-                tickLower !== undefined &&
-                tickUpper !== undefined &&
-                amount
-              ) {
-                this.addTick(tickLower, -amount, pool)
-                this.addTick(tickUpper, amount, pool)
+                if (
+                  tickLower !== undefined &&
+                  tickUpper !== undefined &&
+                  amount
+                ) {
+                  this.addTick(tickLower, -amount, pool)
+                  this.addTick(tickUpper, amount, pool)
+                }
               }
               break
             }

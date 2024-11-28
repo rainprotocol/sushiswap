@@ -356,7 +356,7 @@ export class DataFetcher {
         }
       }
       if (p.innerPools) {
-        const pools = p.innerPool as Map<string, { blockNumber: bigint }>
+        const pools = p.innerPools as Map<string, { blockNumber: bigint }>
         pools.forEach((pool, address) => {
           if (!addresses.includes(address)) {
             addresses.push(address)
