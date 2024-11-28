@@ -1,19 +1,19 @@
 import { describe, expect, it } from 'vitest'
 import { ChainId } from '../chain/constants.js'
 import { ROUTE_PROCESSOR_4_ADDRESS } from '../config/route-processor.js'
-import { USDC, WNATIVE } from '../currency/tokens.js'
+import { USDC, USDT } from '../currency/tokens.js'
 import { DataFetcher } from './data-fetcher.js'
 import { LiquidityProviders } from './liquidity-providers/index.js'
 import { Router } from './router.js'
 
 describe('DataFetcher Indexer', async () => {
   it('should correctly update pools data by logs', async () => {
-    // 200 blocks apart
+    // 2000 blocks apart
     const currentBlockNumber = 64818756n
-    const oldBlockNumber = 64818556n
-    const fromToken = USDC[ChainId.POLYGON]
-    const toToken = WNATIVE[ChainId.POLYGON]
-    const amountIn = 10000000n // 10e6, ie 10 USDC
+    const oldBlockNumber = 64816756n
+    const fromToken = USDT[ChainId.POLYGON]
+    const toToken = USDC[ChainId.POLYGON]
+    const amountIn = 10_000_000n // 10e6, ie 10 USDC
     const gasPrice = 30_000_000
     // one of each type
     const lps = [

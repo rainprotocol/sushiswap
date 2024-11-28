@@ -39,7 +39,7 @@ export const AlgebraEventsAbi = [
   ),
   parseAbiItem('event Fee(uint16 fee)'),
   parseAbiItem('event TickSpacing(int24 newTickSpacing)'),
-  // for factory, new pool created
+  // for algebra factory, new pool created
   parseAbiItem(
     'event Pool(address indexed token0, address indexed token1, address pool)',
   ),

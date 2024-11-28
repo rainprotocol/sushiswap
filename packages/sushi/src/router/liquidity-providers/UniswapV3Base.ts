@@ -460,7 +460,7 @@ export abstract class UniswapV3BaseProvider extends LiquidityProvider {
         })
 
     const liquidities = []
-    for (let i = 0; i < results.length; i += 2) {
+    for (let i = 0; i < results.length; i++) {
       const liquidity = results?.[i]?.result
       if (typeof liquidity === 'bigint') {
         liquidities.push(liquidity)
@@ -653,7 +653,7 @@ export abstract class UniswapV3BaseProvider extends LiquidityProvider {
         ...pool,
         reserve0: reserves[i]![0],
         reserve1: reserves[i]![1],
-        liquidity: liquidity[0]!,
+        liquidity: liquidity[i]!,
         ticks: ticks[i]!,
       })
     })
@@ -829,7 +829,7 @@ export abstract class UniswapV3BaseProvider extends LiquidityProvider {
                 if (
                   tickLower !== undefined &&
                   tickUpper !== undefined &&
-                  amount
+                  amount !== undefined
                 ) {
                   const tick = pool.activeTick
                   if (tickLower <= tick && tick < tickUpper)
@@ -842,7 +842,7 @@ export abstract class UniswapV3BaseProvider extends LiquidityProvider {
                 if (
                   tickLower !== undefined &&
                   tickUpper !== undefined &&
-                  amount
+                  amount !== undefined
                 ) {
                   this.addTick(tickLower, amount, pool)
                   this.addTick(tickUpper, -amount, pool)
@@ -858,7 +858,7 @@ export abstract class UniswapV3BaseProvider extends LiquidityProvider {
                 if (
                   tickLower !== undefined &&
                   tickUpper !== undefined &&
-                  amount
+                  amount !== undefined
                 ) {
                   const tick = pool.activeTick
                   if (tickLower <= tick && tick < tickUpper)
@@ -867,7 +867,7 @@ export abstract class UniswapV3BaseProvider extends LiquidityProvider {
                 if (
                   tickLower !== undefined &&
                   tickUpper !== undefined &&
-                  amount
+                  amount !== undefined
                 ) {
                   this.addTick(tickLower, -amount, pool)
                   this.addTick(tickUpper, amount, pool)
@@ -936,11 +936,13 @@ export abstract class UniswapV3BaseProvider extends LiquidityProvider {
     }
   }
 
-  override async afterProcessLog() {
+  override async afterProcessLog(untilBlock: bigint) {
     const newTicksQueue = [...this.newTicksQueue.splice(0)]
     try {
       if (newTicksQueue.length) {
-        const newTicks = await this.getTicksInner(newTicksQueue)
+        const newTicks = await this.getTicksInner(newTicksQueue, {
+          blockNumber: untilBlock,
+        })
         newTicksQueue.forEach(([pool], i) => {
           newTicks?.[i]?.forEach((newTick, index) => {
             pool.ticks.set(index, newTick)

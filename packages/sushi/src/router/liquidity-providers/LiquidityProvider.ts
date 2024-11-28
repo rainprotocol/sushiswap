@@ -132,7 +132,7 @@ export abstract class LiquidityProvider {
       .join(':')
 
   processLog(_log: Log) {}
-  async afterProcessLog() {}
+  async afterProcessLog(_untilBlock: bigint) {}
 }
 
 export const UniV2LiquidityProviders: LiquidityProviders[] = [

@@ -395,7 +395,7 @@ export class DataFetcher {
       })
     })
     const results = await Promise.allSettled(
-      this.providers.map((p) => p.afterProcessLog()),
+      this.providers.map((p) => p.afterProcessLog(untilBlock!)),
     )
     results.forEach((res, i) => {
       if (res.status === 'fulfilled') {
