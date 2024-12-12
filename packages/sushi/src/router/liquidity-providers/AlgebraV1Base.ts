@@ -364,9 +364,7 @@ export abstract class AlgebraV1BaseProvider extends UniswapV3BaseProvider {
           eventName: 'Pool',
         })[0]!
         this.nonExistentPools.delete(event.args.pool.toLowerCase())
-      } catch {
-        /**/
-      }
+      } catch {}
     } else {
       const pool = this.innerPools.get(logAddress) as V3Pool | undefined
       if (pool) {
@@ -497,9 +495,7 @@ export abstract class AlgebraV1BaseProvider extends UniswapV3BaseProvider {
             }
             default:
           }
-        } catch {
-          /**/
-        }
+        } catch {}
       }
     }
   }

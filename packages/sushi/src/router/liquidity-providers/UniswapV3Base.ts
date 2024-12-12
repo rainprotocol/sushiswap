@@ -263,7 +263,7 @@ export abstract class UniswapV3BaseProvider extends LiquidityProvider {
           return undefined
         })
 
-    const initExistingPools: V3Pool[] = []
+    const existingPools: V3Pool[] = []
 
     staticPools.forEach((pool, i) => {
       const poolAddress = pool.address.toLowerCase()
@@ -290,12 +290,12 @@ export abstract class UniswapV3BaseProvider extends LiquidityProvider {
           }
         }
       }
-      const activeTick = this.getActiveTick(tick, thisPoolTickSpacing!)
+      const activeTick = this.getActiveTick(tick, thisPoolTickSpacing)
       if (typeof activeTick !== 'number') {
         this.handleNonExistentPool(poolAddress)
         return
       }
-      initExistingPools.push({
+      existingPools.push({
         ...pool,
         sqrtPriceX96,
         activeTick,
@@ -308,7 +308,7 @@ export abstract class UniswapV3BaseProvider extends LiquidityProvider {
       })
     })
 
-    return initExistingPools
+    return existingPools
   }
 
   getIndexes(existingPools: V3Pool[]): [number[], number[]] {
@@ -355,48 +355,6 @@ export abstract class UniswapV3BaseProvider extends LiquidityProvider {
     poolTicks.push({
       index: upperUnknownTick,
       DLiquidity: 0n,
-    })
-  }
-
-  async fetchPoolsForToken(
-    t0: Token,
-    t1: Token,
-    excludePools?: Set<string> | PoolFilter,
-    options?: DataFetcherOptions,
-  ): Promise<void> {
-    const existingPools = await this.fetchPoolData(
-      t0,
-      t1,
-      excludePools,
-      options,
-    )
-    if (existingPools.length === 0) return
-
-    const [liquidity, reserves, ticks] = await Promise.all([
-      this.getLiquidity(existingPools, options),
-      this.getReserves(existingPools, options),
-      this.getTicks(existingPools, options),
-    ])
-    existingPools.forEach((pool, i) => {
-      if (
-        liquidity === undefined ||
-        reserves === undefined ||
-        ticks === undefined
-      )
-        return
-      if (
-        liquidity[i] === undefined ||
-        reserves[i] === undefined ||
-        ticks[i] === undefined
-      )
-        return
-      this.innerPools.set(pool.address.toLowerCase(), {
-        ...pool,
-        reserve0: reserves[i]![0],
-        reserve1: reserves[i]![1],
-        liquidity: liquidity[i]!,
-        ticks: ticks[i]!,
-      })
     })
   }
 
@@ -644,6 +602,48 @@ export abstract class UniswapV3BaseProvider extends LiquidityProvider {
     return poolTicks
   }
 
+  async fetchPoolsForToken(
+    t0: Token,
+    t1: Token,
+    excludePools?: Set<string> | PoolFilter,
+    options?: DataFetcherOptions,
+  ): Promise<void> {
+    const existingPools = await this.fetchPoolData(
+      t0,
+      t1,
+      excludePools,
+      options,
+    )
+    if (existingPools.length === 0) return
+
+    const [liquidity, reserves, ticks] = await Promise.all([
+      this.getLiquidity(existingPools, options),
+      this.getReserves(existingPools, options),
+      this.getTicks(existingPools, options),
+    ])
+    existingPools.forEach((pool, i) => {
+      if (
+        liquidity === undefined ||
+        reserves === undefined ||
+        ticks === undefined
+      )
+        return
+      if (
+        liquidity[i] === undefined ||
+        reserves[i] === undefined ||
+        ticks[i] === undefined
+      )
+        return
+      this.innerPools.set(pool.address.toLowerCase(), {
+        ...pool,
+        reserve0: reserves[i]![0],
+        reserve1: reserves[i]![1],
+        liquidity: liquidity[i]!,
+        ticks: ticks[i]!,
+      })
+    })
+  }
+
   getStaticPools(t1: Token, t2: Token): StaticPoolUniV3[] {
     const currencyCombinations = getCurrencyCombinations(this.chainId, t1, t2)
 
@@ -746,7 +746,6 @@ export abstract class UniswapV3BaseProvider extends LiquidityProvider {
           this.getPoolProviderName(),
         )
       })
-    // return Array.from(this.pools.values())
   }
 
   stopFetchPoolsData() {
@@ -797,9 +796,7 @@ export abstract class UniswapV3BaseProvider extends LiquidityProvider {
           eventName: 'PoolCreated',
         })[0]!
         this.nonExistentPools.delete(event.args.pool.toLowerCase())
-      } catch {
-        /**/
-      }
+      } catch {}
     } else {
       const pool = this.innerPools.get(logAddress) as V3Pool | undefined
       if (pool) {
@@ -914,9 +911,7 @@ export abstract class UniswapV3BaseProvider extends LiquidityProvider {
             }
             default:
           }
-        } catch {
-          /**/
-        }
+        } catch {}
       }
     }
   }

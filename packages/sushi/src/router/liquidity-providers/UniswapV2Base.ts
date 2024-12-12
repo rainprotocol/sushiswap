@@ -607,7 +607,7 @@ export abstract class UniswapV2BaseProvider extends LiquidityProvider {
   getCurrentPoolList(t0: Token, t1: Token): PoolCode[] {
     const tradeId = this.getTradeId(t0, t1)
     const poolsByTrade = this.poolsByTrade.get(tradeId) ?? []
-    return poolsByTrade
+    const onDemandPoolCodes = poolsByTrade
       ? Array.from(this.innerPools)
           .filter(([poolAddress]) =>
             poolsByTrade.includes(poolAddress as `0x${string}`),
@@ -629,7 +629,7 @@ export abstract class UniswapV2BaseProvider extends LiquidityProvider {
           })
       : []
 
-    // return [...this.topPools.values(), onDemandPoolCodes].flat()
+    return [...this.topPools.values(), onDemandPoolCodes].flat()
   }
 
   stopFetchPoolsData() {
@@ -649,9 +649,7 @@ export abstract class UniswapV2BaseProvider extends LiquidityProvider {
           eventName: 'PairCreated',
         })[0]!
         this.nonExistentPools.delete(event.args[2].toLowerCase())
-      } catch {
-        /**/
-      }
+      } catch {}
     } else {
       const pool = this.innerPools.get(logAddress as `0x${string}`)
       if (pool) {
@@ -665,9 +663,7 @@ export abstract class UniswapV2BaseProvider extends LiquidityProvider {
             pool.blockNumber = log.blockNumber!
             pool.reserve0 = event.args.reserve0
             pool.reserve1 = event.args.reserve1
-          } catch {
-            /**/
-          }
+          } catch {}
         }
       }
     }
