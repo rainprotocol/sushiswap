@@ -137,9 +137,13 @@ export abstract class UniswapV3BaseProvider extends LiquidityProvider {
     }
   }
 
-  getActiveTick = (tickCurrent: number, tickSpacing?: number) =>
-    typeof tickCurrent === 'number' && typeof tickSpacing === 'number'
-      ? Math.floor(tickCurrent / tickSpacing) * tickSpacing
+  getActiveTick = (
+    tickCurrent: number,
+    feeAmount: UniV3FeeType[keyof UniV3FeeType],
+  ) =>
+    typeof tickCurrent === 'number' && feeAmount
+      ? Math.floor(tickCurrent / this.TICK_SPACINGS[feeAmount]!) *
+        this.TICK_SPACINGS[feeAmount]!
       : undefined
 
   async fetchPoolData(
@@ -290,7 +294,7 @@ export abstract class UniswapV3BaseProvider extends LiquidityProvider {
           }
         }
       }
-      const activeTick = this.getActiveTick(tick, thisPoolTickSpacing)
+      const activeTick = this.getActiveTick(tick, thisPoolTickSpacing!)
       if (typeof activeTick !== 'number') {
         this.handleNonExistentPool(poolAddress)
         return
@@ -355,6 +359,48 @@ export abstract class UniswapV3BaseProvider extends LiquidityProvider {
     poolTicks.push({
       index: upperUnknownTick,
       DLiquidity: 0n,
+    })
+  }
+
+  async fetchPoolsForToken(
+    t0: Token,
+    t1: Token,
+    excludePools?: Set<string> | PoolFilter,
+    options?: DataFetcherOptions,
+  ): Promise<void> {
+    const existingPools = await this.fetchPoolData(
+      t0,
+      t1,
+      excludePools,
+      options,
+    )
+    if (existingPools.length === 0) return
+
+    const [liquidity, reserves, ticks] = await Promise.all([
+      this.getLiquidity(existingPools, options),
+      this.getReserves(existingPools, options),
+      this.getTicks(existingPools, options),
+    ])
+    existingPools.forEach((pool, i) => {
+      if (
+        liquidity === undefined ||
+        reserves === undefined ||
+        ticks === undefined
+      )
+        return
+      if (
+        liquidity[i] === undefined ||
+        reserves[i] === undefined ||
+        ticks[i] === undefined
+      )
+        return
+      this.innerPools.set(pool.address.toLowerCase(), {
+        ...pool,
+        reserve0: reserves[i]![0],
+        reserve1: reserves[i]![1],
+        liquidity: liquidity[i]!,
+        ticks: ticks[i]!,
+      })
     })
   }
 
@@ -600,48 +646,6 @@ export abstract class UniswapV3BaseProvider extends LiquidityProvider {
       )
     })
     return poolTicks
-  }
-
-  async fetchPoolsForToken(
-    t0: Token,
-    t1: Token,
-    excludePools?: Set<string> | PoolFilter,
-    options?: DataFetcherOptions,
-  ): Promise<void> {
-    const existingPools = await this.fetchPoolData(
-      t0,
-      t1,
-      excludePools,
-      options,
-    )
-    if (existingPools.length === 0) return
-
-    const [liquidity, reserves, ticks] = await Promise.all([
-      this.getLiquidity(existingPools, options),
-      this.getReserves(existingPools, options),
-      this.getTicks(existingPools, options),
-    ])
-    existingPools.forEach((pool, i) => {
-      if (
-        liquidity === undefined ||
-        reserves === undefined ||
-        ticks === undefined
-      )
-        return
-      if (
-        liquidity[i] === undefined ||
-        reserves[i] === undefined ||
-        ticks[i] === undefined
-      )
-        return
-      this.innerPools.set(pool.address.toLowerCase(), {
-        ...pool,
-        reserve0: reserves[i]![0],
-        reserve1: reserves[i]![1],
-        liquidity: liquidity[i]!,
-        ticks: ticks[i]!,
-      })
-    })
   }
 
   getStaticPools(t1: Token, t2: Token): StaticPoolUniV3[] {
