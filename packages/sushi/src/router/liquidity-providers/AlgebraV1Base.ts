@@ -181,15 +181,13 @@ export abstract class AlgebraV1BaseProvider extends UniswapV3BaseProvider {
     staticPools.forEach((pool, i) => {
       if (globalState === undefined || !globalState[i]) return
       let thisPoolTickSpacing = this.DEFAULT_TICK_SPACING
-      if (poolsTickSpacing !== undefined && Array.isArray(poolsTickSpacing)) {
-        if (poolsTickSpacing[i] !== undefined) {
-          const ts = poolsTickSpacing[i]
-          if (typeof ts === 'number') {
-            thisPoolTickSpacing = ts
-          } else {
-            if (ts?.status === 'success') {
-              thisPoolTickSpacing = ts.result
-            }
+      if (poolsTickSpacing?.[i] !== undefined) {
+        const ts = poolsTickSpacing[i]
+        if (typeof ts === 'number') {
+          thisPoolTickSpacing = ts
+        } else {
+          if (ts?.status === 'success') {
+            thisPoolTickSpacing = ts.result
           }
         }
       }
