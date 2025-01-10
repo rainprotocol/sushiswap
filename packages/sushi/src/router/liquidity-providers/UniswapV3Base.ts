@@ -288,31 +288,31 @@ export abstract class UniswapV3BaseProvider extends LiquidityProvider {
     for (maxIndex = currentTickIndex + 1; pool.ticks.has(maxIndex); ++maxIndex);
     if (maxIndex - minIndex <= 1) return []
 
-    let ticks: CLTick[] = []
+    let poolTicks: CLTick[] = []
     for (let i = minIndex + 1; i < maxIndex; ++i)
-      ticks = ticks.concat(pool.ticks.get(i)!)
+      poolTicks = poolTicks.concat(pool.ticks.get(i)!)
 
     const lowerUnknownTick =
       (minIndex + 1) * pool.tickSpacing * 256 - pool.tickSpacing
     console.assert(
-      ticks.length === 0 || lowerUnknownTick < ticks[0]!.index,
-      'Error 85: unexpected min tick index',
+      poolTicks.length === 0 || lowerUnknownTick < poolTicks[0]!.index,
+      'Error 236: unexpected min tick index',
     )
-    ticks.unshift({
+    poolTicks.unshift({
       index: lowerUnknownTick,
       DLiquidity: 0n,
     })
     const upperUnknownTick = maxIndex * pool.tickSpacing * 256
     console.assert(
-      ticks[ticks.length - 1]!.index < upperUnknownTick,
-      'Error 91: unexpected max tick index',
+      poolTicks[poolTicks.length - 1]!.index < upperUnknownTick,
+      'Error 244: unexpected max tick index',
     )
-    ticks.push({
+    poolTicks.push({
       index: upperUnknownTick,
       DLiquidity: 0n,
     })
 
-    return ticks
+    return poolTicks
   }
 
   async fetchPoolsForToken(

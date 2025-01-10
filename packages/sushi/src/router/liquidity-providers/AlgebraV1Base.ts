@@ -218,57 +218,6 @@ export abstract class AlgebraV1BaseProvider extends UniswapV3BaseProvider {
     return existingPools
   }
 
-  // getIndexes(existingPools: V3Pool[]): [number[], number[]] {
-  //   const minIndexes = existingPools.map((pool) =>
-  //     bitmapIndex(
-  //       pool.activeTick - NUMBER_OF_SURROUNDING_TICKS,
-  //       pool.tickSpacing,
-  //     ),
-  //   )
-  //   const maxIndexes = existingPools.map((pool) =>
-  //     bitmapIndex(
-  //       pool.activeTick + NUMBER_OF_SURROUNDING_TICKS,
-  //       pool.tickSpacing,
-  //     ),
-  //   )
-  //   return [minIndexes, maxIndexes]
-  // }
-
-  // override handleTickBoundries(
-  //   i: number,
-  //   pool: V3Pool,
-  //   poolTicks: {
-  //     index: number
-  //     DLiquidity: bigint
-  //   }[],
-  //   minIndexes: number[],
-  //   maxIndexes: number[],
-  // ) {
-  //   const lowerUnknownTick =
-  //     minIndexes[i]! * this.TICK_SPACINGS[pool.address.toLowerCase()]! * 256 -
-  //     this.TICK_SPACINGS[pool.address.toLowerCase()]!
-  //   console.assert(
-  //     poolTicks.length === 0 || lowerUnknownTick < poolTicks[0]!.index,
-  //     'Error 236: unexpected min tick index',
-  //   )
-  //   poolTicks.unshift({
-  //     index: lowerUnknownTick,
-  //     DLiquidity: 0n,
-  //   })
-  //   const upperUnknownTick =
-  //     (maxIndexes[i]! + 1) *
-  //     this.TICK_SPACINGS[pool.address.toLowerCase()]! *
-  //     256
-  //   console.assert(
-  //     poolTicks[poolTicks.length - 1]!.index < upperUnknownTick,
-  //     'Error 244: unexpected max tick index',
-  //   )
-  //   poolTicks.push({
-  //     index: upperUnknownTick,
-  //     DLiquidity: 0n,
-  //   })
-  // }
-
   override getStaticPools(t1: Token, t2: Token): StaticPoolUniV3[] {
     const allCombinations = getCurrencyCombinations(this.chainId, t1, t2)
     const currencyCombinations: [Token, Token][] = []
