@@ -1,6 +1,15 @@
 import { getCreate2Address } from '@ethersproject/address'
 import { add, getUnixTime } from 'date-fns'
-import { Address, Hex, PublicClient, encodePacked, keccak256 } from 'viem'
+import {
+  Address,
+  Hex,
+  Log,
+  PublicClient,
+  encodePacked,
+  keccak256,
+  parseAbiItem,
+  parseEventLogs,
+} from 'viem'
 import { getReservesAbi as abi } from '../../abi/index.js'
 import { ChainId } from '../../chain/index.js'
 import {
@@ -31,7 +40,17 @@ export interface StaticPool {
   token0: Token
   token1: Token
   fee: number
+  reserve0: bigint
+  reserve1: bigint
+  blockNumber: bigint
 }
+
+export const UniV2EventsAbi = [
+  parseAbiItem('event Sync(uint112 reserve0, uint112 reserve1)'),
+  parseAbiItem(
+    'event PairCreated(address indexed token0, address indexed token1, address pair, uint)',
+  ),
+]
 
 export abstract class UniswapV2BaseProvider extends LiquidityProvider {
   readonly TOP_POOL_SIZE = 155
@@ -44,6 +63,8 @@ export abstract class UniswapV2BaseProvider extends LiquidityProvider {
   onDemandPools: Map<Address, PoolInfo> = new Map()
   availablePools: Map<Address, PoolResponse2> = new Map()
   staticPools: Map<Address, PoolResponse2> = new Map()
+  nonExistentPools: Map<string, number> = new Map()
+  innerPools: Map<string, StaticPool> = new Map()
 
   blockListener?: (() => void) | undefined
   unwatchBlockNumber?: () => void
@@ -60,6 +81,7 @@ export abstract class UniswapV2BaseProvider extends LiquidityProvider {
     add(Date.now(), { seconds: this.FETCH_AVAILABLE_POOLS_AFTER_SECONDS }),
   )
   getReservesAbi: any = abi
+  eventsAbi = UniV2EventsAbi
 
   constructor(
     chainId: ChainId,
@@ -160,7 +182,7 @@ export abstract class UniswapV2BaseProvider extends LiquidityProvider {
   }
 
   async getReserves(
-    poolCodesToCreate: PoolCode[],
+    poolCodesToCreate: StaticPool[],
     options?: DataFetcherOptions,
   ): Promise<any> {
     const multicallMemoize = await memoizer.fn(this.client.multicall)
@@ -173,7 +195,7 @@ export abstract class UniswapV2BaseProvider extends LiquidityProvider {
       contracts: poolCodesToCreate.map(
         (poolCode) =>
           ({
-            address: poolCode.pool.address as Address,
+            address: poolCode.address as Address,
             chainId: this.chainId,
             abi: this.getReservesAbi,
             functionName: 'getReserves',
@@ -228,7 +250,7 @@ export abstract class UniswapV2BaseProvider extends LiquidityProvider {
 
     this.poolsByTrade.set(
       this.getTradeId(t0, t1),
-      pools.map((pool) => pool.address),
+      pools.map((pool) => pool.address.toLowerCase() as `0x${string}`),
     )
     const validUntilTimestamp = getUnixTime(
       add(Date.now(), { seconds: this.ON_DEMAND_POOLS_LIFETIME_IN_SECONDS }),
@@ -236,30 +258,20 @@ export abstract class UniswapV2BaseProvider extends LiquidityProvider {
 
     // let created = 0
     // let updated = 0
-    const poolCodesToCreate: PoolCode[] = []
+    const poolCodesToCreate: StaticPool[] = []
     pools.forEach((pool) => {
-      const existingPool = this.onDemandPools.get(pool.address)
-      if (existingPool === undefined) {
-        const token0 = pool.token0 as RToken
-        const token1 = pool.token1 as RToken
-
-        const rPool = new ConstantProductRPool(
-          pool.address,
-          token0,
-          token1,
-          'fee' in pool ? pool.fee : this.fee,
-          0n,
-          0n,
-        )
-        const pc = new ConstantProductPoolCode(
-          rPool,
-          this.getType(),
-          this.getPoolProviderName(),
-        )
-        poolCodesToCreate.push(pc)
-      } else {
-        existingPool.validUntilTimestamp = validUntilTimestamp
-        // ++updated
+      const existingPool = this.innerPools.get(pool.address.toLowerCase())
+      const nonExistentPool = this.nonExistentPools.get(
+        pool.address.toLowerCase(),
+      )
+      if (
+        existingPool === undefined &&
+        (!nonExistentPool || nonExistentPool < 2)
+      ) {
+        poolCodesToCreate.push({
+          ...pool,
+          blockNumber: options?.blockNumber ?? 0n,
+        } as StaticPool)
       }
     })
 
@@ -271,23 +283,37 @@ export abstract class UniswapV2BaseProvider extends LiquidityProvider {
   }
 
   handleCreatePoolCode(
-    poolCodesToCreate: PoolCode[],
+    poolCodesToCreate: StaticPool[],
     reserves: any[],
-    validUntilTimestamp: number,
+    _validUntilTimestamp: number,
   ) {
     poolCodesToCreate.forEach((poolCode, i) => {
-      const pool = poolCode.pool
+      const pool = poolCode
       const res0 = reserves?.[i]?.result?.[0]
       const res1 = reserves?.[i]?.result?.[1]
 
       if (res0 !== undefined && res1 !== undefined) {
-        pool.updateReserves(res0, res1)
-        this.onDemandPools.set(pool.address, { poolCode, validUntilTimestamp })
+        this.innerPools.set(pool.address.toLowerCase(), {
+          ...pool,
+          reserve0: res0,
+          reserve1: res1,
+        })
         // console.debug(
         //   `${this.getLogPrefix()} - ON DEMAND CREATION: ${pool.address} (${pool.token0.symbol}/${pool.token1.symbol})`
         // )
         // ++created
       } else {
+        const nonExistentPool = this.nonExistentPools.get(
+          pool.address.toLowerCase(),
+        )
+        if (nonExistentPool) {
+          this.nonExistentPools.set(
+            pool.address.toLowerCase(),
+            nonExistentPool + 1,
+          )
+        } else {
+          this.nonExistentPools.set(pool.address.toLowerCase(), 1)
+        }
         // Pool doesn't exist?
         // console.error(`${this.getLogPrefix()} - ERROR FETCHING RESERVES, initialize on demand pool: ${pool.address}`)
       }
@@ -520,6 +546,9 @@ export abstract class UniswapV2BaseProvider extends LiquidityProvider {
       token0: combination[0]!,
       token1: combination[1]!,
       fee: this.fee,
+      reserve0: 0n,
+      reserve1: 0n,
+      blockNumber: 0n,
     }))
     // return pools
   }
@@ -579,9 +608,25 @@ export abstract class UniswapV2BaseProvider extends LiquidityProvider {
     const tradeId = this.getTradeId(t0, t1)
     const poolsByTrade = this.poolsByTrade.get(tradeId) ?? []
     const onDemandPoolCodes = poolsByTrade
-      ? Array.from(this.onDemandPools)
-          .filter(([poolAddress]) => poolsByTrade.includes(poolAddress))
-          .map(([, p]) => p.poolCode)
+      ? Array.from(this.innerPools)
+          .filter(([poolAddress]) =>
+            poolsByTrade.includes(poolAddress as `0x${string}`),
+          )
+          .map(([, pool]) => {
+            const rPool = new ConstantProductRPool(
+              pool.address,
+              pool.token0 as RToken,
+              pool.token1 as RToken,
+              'fee' in pool ? pool.fee : this.fee,
+              pool.reserve0,
+              pool.reserve1,
+            )
+            return new ConstantProductPoolCode(
+              rPool,
+              this.getType(),
+              this.getPoolProviderName(),
+            )
+          })
       : []
 
     return [...this.topPools.values(), onDemandPoolCodes].flat()
@@ -590,5 +635,37 @@ export abstract class UniswapV2BaseProvider extends LiquidityProvider {
   stopFetchPoolsData() {
     if (this.unwatchBlockNumber) this.unwatchBlockNumber()
     this.blockListener = undefined
+  }
+
+  override processLog(log: Log) {
+    const factory =
+      this.factory[this.chainId as keyof typeof this.factory]!.toLowerCase()
+    const logAddress = log.address.toLowerCase()
+    if (logAddress === factory) {
+      try {
+        const event = parseEventLogs({
+          logs: [log],
+          abi: this.eventsAbi,
+          eventName: 'PairCreated',
+        })[0]!
+        this.nonExistentPools.delete(event.args[2].toLowerCase())
+      } catch {}
+    } else {
+      const pool = this.innerPools.get(logAddress as `0x${string}`)
+      if (pool) {
+        if (log.blockNumber! >= pool.blockNumber) {
+          try {
+            const event = parseEventLogs({
+              logs: [log],
+              abi: this.eventsAbi,
+              eventName: 'Sync',
+            })[0]!
+            pool.blockNumber = log.blockNumber!
+            pool.reserve0 = event.args.reserve0
+            pool.reserve1 = event.args.reserve1
+          } catch {}
+        }
+      }
+    }
   }
 }

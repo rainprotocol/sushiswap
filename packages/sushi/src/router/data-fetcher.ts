@@ -1,4 +1,5 @@
-import { http, PublicClient, createPublicClient } from 'viem'
+import { isDeepStrictEqual } from 'util'
+import { http, ParseAbiItem, PublicClient, createPublicClient } from 'viem'
 import { ChainId, TestnetChainId } from '../chain/index.js'
 import { publicClientConfig } from '../config/index.js'
 import { Type } from '../currency/index.js'
@@ -7,8 +8,6 @@ import { BaseSwapProvider } from './liquidity-providers/BaseSwap.js'
 import { BiswapProvider } from './liquidity-providers/Biswap.js'
 import { BlastDEXProvider } from './liquidity-providers/BlastDEX.js'
 import { BlazeSwapProvider } from './liquidity-providers/BlazeSwap.js'
-import { CamelotProvider } from './liquidity-providers/Camelot.js'
-import { CurveProvider } from './liquidity-providers/CurveProvider.js'
 import { DfynProvider } from './liquidity-providers/Dfyn.js'
 import { DovishV3Provider } from './liquidity-providers/DovishV3.js'
 import { DyorV2Provider } from './liquidity-providers/DyorV2.js'
@@ -51,7 +50,6 @@ import {
 } from './liquidity-providers/ThrusterV2.js'
 import { ThrusterV3Provider } from './liquidity-providers/ThrusterV3.js'
 import { TraderJoeProvider } from './liquidity-providers/TraderJoe.js'
-import { TridentProvider } from './liquidity-providers/Trident.js'
 import { UbeSwapProvider } from './liquidity-providers/UbeSwap.js'
 import { UniswapV2Provider } from './liquidity-providers/UniswapV2.js'
 import { UniswapV3Provider } from './liquidity-providers/UniswapV3.js'
@@ -88,6 +86,7 @@ export class DataFetcher {
   poolCodes: Map<LiquidityProviders, Map<string, PoolCode>> = new Map()
   stateId = 0
   web3Client: PublicClient
+  eventsAbi: ParseAbiItem<any>[] = []
 
   // TODO: maybe use an actual map
   // private static cache = new Map<number, DataFetcher>()
@@ -103,19 +102,6 @@ export class DataFetcher {
     this.cache[chainId] = dataFetcher
     return dataFetcher
   }
-
-  // constructor({
-  //   chainId,
-  //   publicClient,
-  // }: {
-  //   chainId: ChainId
-  //   publicClient?: PublicClient
-  //   providers: LiquidityProviders[]
-  //   // providers?: (new (
-  //   //   chainId: ChainId,
-  //   //   publicClient: PublicClient,
-  //   // ) => LiquidityProvider)[]
-  // }) {
 
   constructor(chainId: ChainId, publicClient?: PublicClient) {
     this.chainId = chainId as Exclude<ChainId, TestnetChainId>
@@ -160,8 +146,8 @@ export class DataFetcher {
       BiswapProvider,
       BlastDEXProvider,
       BlazeSwapProvider,
-      CamelotProvider,
-      CurveProvider,
+      // CamelotProvider,
+      // CurveProvider,
       DfynProvider,
       DovishV3Provider,
       DyorV2Provider,
@@ -197,7 +183,7 @@ export class DataFetcher {
       ThrusterV2_3Provider,
       ThrusterV3Provider,
       TraderJoeProvider,
-      TridentProvider,
+      // TridentProvider,
       UbeSwapProvider,
       UniswapV2Provider,
       UniswapV3Provider,
@@ -212,6 +198,14 @@ export class DataFetcher {
           this._providerIsIncluded(provider.getType(), providers)
         ) {
           this.providers.push(provider)
+          // gather eventsAbi unique instances
+          if (provider?.eventsAbi?.length) {
+            ;(provider.eventsAbi as any[]).forEach((v) => {
+              if (this.eventsAbi.every((e) => !isDeepStrictEqual(e, v))) {
+                this.eventsAbi.push(v)
+              }
+            })
+          }
         }
       } catch (_e: unknown) {
         // console.warn(e)
@@ -246,6 +240,14 @@ export class DataFetcher {
   ): Promise<void> {
     // console.log('PROVIDER COUNT', this.providers.length)
     // ensure that we only fetch the native wrap pools if the token is the native currency and wrapped native currency
+    if (!options) {
+      options = {
+        blockNumber: await this.web3Client.getBlockNumber(),
+      }
+    }
+    if (typeof options.blockNumber !== 'bigint') {
+      options.blockNumber = await this.web3Client.getBlockNumber()
+    }
     if (currency0.wrapped.equals(currency1.wrapped)) {
       const provider = this.providers.find(
         (p) => p.getType() === LiquidityProviders.NativeWrap,
@@ -335,5 +337,79 @@ export class DataFetcher {
       }
     })
     return lastUpdateBlock === undefined ? 0 : lastUpdateBlock
+  }
+
+  async updateCachedPools(untilBlock?: bigint) {
+    let fromBlock = -1n
+    const addresses: string[] = []
+    if (typeof untilBlock !== 'bigint') {
+      untilBlock = await this.web3Client.getBlockNumber()
+    }
+
+    // gather all provider factory and pools addresses
+    this.providers.forEach((p: any) => {
+      if (p.factory) {
+        const factory =
+          p.factory[this.chainId as keyof typeof p.factory]!.toLowerCase()
+        if (!addresses.includes(factory)) {
+          addresses.push(factory)
+        }
+      }
+      if (p.innerPools) {
+        const pools = p.innerPools as Map<string, { blockNumber: bigint }>
+        pools.forEach((pool, address) => {
+          if (!addresses.includes(address)) {
+            addresses.push(address)
+          }
+          if (fromBlock === -1n) {
+            fromBlock = pool.blockNumber
+          }
+          if (pool.blockNumber < fromBlock) {
+            fromBlock = pool.blockNumber
+          }
+        })
+      }
+    })
+    if (!addresses.length) return
+    if (fromBlock === untilBlock) return
+
+    // get logs and sort them from earliest block to latest
+    const logs = await this.web3Client.getLogs({
+      events: this.eventsAbi,
+      address: addresses as `0x${string}`[],
+      fromBlock,
+      toBlock: untilBlock,
+    })
+    logs.sort((a, b) => {
+      const diff = a.blockNumber - b.blockNumber
+      if (diff === 0n) {
+        return a.logIndex - b.logIndex
+      } else {
+        return Number(diff)
+      }
+    })
+
+    // process each log by each provider
+    logs.forEach((log) => {
+      this.providers.forEach((p) => {
+        p.processLog(log)
+      })
+    })
+    const results = await Promise.allSettled(
+      this.providers.map((p) => p.afterProcessLog(untilBlock!)),
+    )
+    results.forEach((res, i) => {
+      if (res.status === 'fulfilled') {
+        if ((this.providers[i] as any)?.innerPools) {
+          const pools = (this.providers[i] as any).innerPools as Map<
+            string,
+            { blockNumber: bigint }
+          >
+          pools.forEach((pool) => {
+            pool.blockNumber = untilBlock as bigint
+          })
+        }
+      }
+    })
   }
 }

@@ -2,9 +2,8 @@ import { Address, PublicClient, parseAbi } from 'viem'
 import { ChainId } from '../../chain/index.js'
 import { DataFetcherOptions } from '../data-fetcher.js'
 import { memoizer } from '../memoizer.js'
-import { type PoolCode } from '../pool-codes/index.js'
 import { LiquidityProviders } from './LiquidityProvider.js'
-import { UniswapV2BaseProvider } from './UniswapV2Base.js'
+import { StaticPool, UniswapV2BaseProvider } from './UniswapV2Base.js'
 
 type IsStableSwap =
   | (
@@ -48,7 +47,7 @@ export class CamelotProvider extends UniswapV2BaseProvider {
   }
 
   override async getReserves(
-    poolCodesToCreate: PoolCode[],
+    poolCodesToCreate: StaticPool[],
     options?: DataFetcherOptions,
   ): Promise<any> {
     const multicallMemoize = await memoizer.fn(this.client.multicall)
@@ -92,7 +91,7 @@ export class CamelotProvider extends UniswapV2BaseProvider {
       contracts: poolCodesToCreate.map(
         (poolCode) =>
           ({
-            address: poolCode.pool.address as Address,
+            address: poolCode.address as Address,
             chainId: this.chainId,
             abi: this.getReservesAbi,
             functionName: 'getReserves',
@@ -125,7 +124,7 @@ export class CamelotProvider extends UniswapV2BaseProvider {
       contracts: poolCodesToCreate.map(
         (poolCode) =>
           ({
-            address: poolCode.pool.address as Address,
+            address: poolCode.address as Address,
             chainId: this.chainId,
             abi: [
               {
@@ -164,9 +163,9 @@ export class CamelotProvider extends UniswapV2BaseProvider {
   }
 
   override handleCreatePoolCode(
-    poolCodesToCreate: PoolCode[],
+    poolCodesToCreate: StaticPool[],
     contractData: [any[], IsStableSwap],
-    validUntilTimestamp: number,
+    _validUntilTimestamp: number,
   ) {
     const [reserves, stableSwaps] = contractData
     poolCodesToCreate.forEach((poolCode, i) => {
@@ -177,7 +176,7 @@ export class CamelotProvider extends UniswapV2BaseProvider {
           : thisStableSwap?.status === 'success'
             ? thisStableSwap?.result
             : undefined
-      const pool = poolCode.pool
+      const pool = poolCode
       const res0 = reserves?.[i]?.result?.[0]
       const res1 = reserves?.[i]?.result?.[1]
 
@@ -189,8 +188,14 @@ export class CamelotProvider extends UniswapV2BaseProvider {
               pool.fee
           } catch {}
         }
-        pool.updateReserves(res0, res1)
-        this.onDemandPools.set(pool.address, { poolCode, validUntilTimestamp })
+        this.innerPools.set(pool.address.toLowerCase(), {
+          ...pool,
+          reserve0: res0,
+          reserve1: res1,
+          blockNumber: 0n,
+        })
+        // pool.updateReserves(res0, res1)
+        // this.onDemandPools.set(pool.address, { poolCode, validUntilTimestamp })
       } else {
         // Pool doesn't exist?
       }
