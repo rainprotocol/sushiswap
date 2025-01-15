@@ -50,7 +50,7 @@ export abstract class UniswapV3BaseProvider extends LiquidityProvider {
   TICK_SPACINGS: UniV3TickSpacingType = TICK_SPACINGS
   FEE: UniV3FeeType = SushiSwapV3FeeAmount
   poolsByTrade: Map<string, string[]> = new Map()
-  pools: Map<string, PoolCode> = new Map()
+  poolsCodes: Map<string, PoolCode> = new Map()
 
   blockListener?: (() => void) | undefined
   unwatchBlockNumber?: () => void
@@ -475,7 +475,7 @@ export abstract class UniswapV3BaseProvider extends LiquidityProvider {
         this.getPoolProviderName(),
       )
       transformedV3Pools.push(pc)
-      this.pools.set(pool.address.toLowerCase(), pc)
+      this.poolsCodes.set(pool.address.toLowerCase(), pc)
     })
 
     this.poolsByTrade.set(
@@ -556,7 +556,7 @@ export abstract class UniswapV3BaseProvider extends LiquidityProvider {
     // })
   }
 
-  getCurrentPoolList(): PoolCode[] {
+  getCurrentPoolList(_t0: Token, _t1: Token): PoolCode[] {
     // const tradeId = this.getTradeId(t0, t1)
     // const poolsByTrade = this.poolsByTrade.get(tradeId) ?? []
     // return poolsByTrade
@@ -564,7 +564,7 @@ export abstract class UniswapV3BaseProvider extends LiquidityProvider {
     //       .filter(([poolAddress]) => poolsByTrade.includes(poolAddress))
     //       .map(([, p]) => p)
     //   : []
-    return Array.from(this.pools.values())
+    return Array.from(this.poolsCodes.values())
   }
 
   stopFetchPoolsData() {

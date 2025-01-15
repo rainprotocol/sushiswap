@@ -1,27 +1,51 @@
 import {
   Address,
   Hex,
+  Log,
   PublicClient,
   encodeAbiParameters,
   getAddress,
   keccak256,
+  parseAbiItem,
 } from 'viem'
 import { ChainId } from '../../chain/index.js'
 import { Token } from '../../currency/index.js'
 import { DataFetcherOptions } from '../data-fetcher.js'
 import { getCurrencyCombinations } from '../get-currency-combinations.js'
-import { memoizer } from '../memoizer.js'
 import {
-  NUMBER_OF_SURROUNDING_TICKS,
   PoolFilter,
   StaticPoolUniV3,
-  UniswapV3BaseProvider,
-  V3Pool,
-  bitmapIndex,
-} from './UniswapV3Base.js'
+} from '../liquidity-providers/UniswapV3Base.js'
+import { memoizer } from '../memoizer.js'
+import { RainUniswapV3BaseProvider, RainV3Pool } from './RainUniswapV3Base.js'
 
-export abstract class AlgebraV1BaseProvider extends UniswapV3BaseProvider {
+export const AlgebraEventsAbi = [
+  parseAbiItem(
+    'event Mint(address sender, address indexed owner, int24 indexed tickLower, int24 indexed tickUpper, uint128 amount, uint256 amount0, uint256 amount1)',
+  ),
+  parseAbiItem(
+    'event Collect(address indexed owner, address recipient, int24 indexed tickLower, int24 indexed tickUpper, uint128 amount0, uint128 amount1)',
+  ),
+  parseAbiItem(
+    'event Burn(address indexed owner, int24 indexed tickLower, int24 indexed tickUpper, uint128 amount, uint256 amount0, uint256 amount1)',
+  ),
+  parseAbiItem(
+    'event Swap(address indexed sender, address indexed recipient, int256 amount0, int256 amount1, uint160 sqrtPriceX96, uint128 liquidity, int24 tick)',
+  ),
+  parseAbiItem(
+    'event Flash(address indexed sender, address indexed recipient, uint256 amount0, uint256 amount1, uint256 paid0, uint256 paid1)',
+  ),
+  parseAbiItem('event Fee(uint16 fee)'),
+  parseAbiItem('event TickSpacing(int24 newTickSpacing)'),
+  // for algebra factory, new pool created
+  parseAbiItem(
+    'event Pool(address indexed token0, address indexed token1, address pool)',
+  ),
+]
+
+export abstract class AlgebraV1BaseProvider extends RainUniswapV3BaseProvider {
   override TICK_SPACINGS: Record<string, number> = {}
+  override eventsAbi = AlgebraEventsAbi as any
 
   readonly BASE_FEE = 100
   DEFAULT_TICK_SPACING = 1
@@ -51,10 +75,17 @@ export abstract class AlgebraV1BaseProvider extends UniswapV3BaseProvider {
     t1: Token,
     excludePools?: Set<string> | PoolFilter,
     options?: DataFetcherOptions,
-  ): Promise<V3Pool[]> {
+  ): Promise<RainV3Pool[]> {
     let staticPools = this.getStaticPools(t0, t1)
     if (excludePools)
       staticPools = staticPools.filter((p) => !excludePools.has(p.address))
+
+    const tradeId = this.getTradeId(t0, t1)
+    if (!this.poolsByTrade.has(tradeId))
+      this.poolsByTrade.set(
+        tradeId,
+        staticPools.map((pool) => pool.address.toLowerCase()),
+      )
 
     const multicallMemoize = await memoizer.fn(this.client.multicall)
 
@@ -118,153 +149,60 @@ export abstract class AlgebraV1BaseProvider extends UniswapV3BaseProvider {
           return undefined
         })
 
-    let poolsTickSpacing:
-      | (
-          | number
-          | {
-              error?: undefined
-              result: number
-              status: 'success'
-            }
-          | {
-              error: Error
-              result?: undefined
-              status: 'failure'
-            }
-        )[]
-      | undefined
+    const tickSpacings = await this.getTickSpacing(staticPools, options)
 
-    try {
-      const tickSpacingsData = {
-        multicallAddress: this.client.chain?.contracts?.multicall3?.address!,
-        allowFailure: true,
-        blockNumber: options?.blockNumber,
-        contracts: staticPools.map(
-          (pool) =>
-            ({
-              address: pool.address,
-              chainId: this.chainId,
-              abi: [
-                {
-                  inputs: [],
-                  name: 'tickSpacing',
-                  outputs: [{ internalType: 'int24', name: '', type: 'int24' }],
-                  stateMutability: 'view',
-                  type: 'function',
-                },
-              ] as const,
-              functionName: 'tickSpacing',
-            }) as const,
-        ),
-      }
-      poolsTickSpacing = options?.memoize
-        ? await (multicallMemoize(tickSpacingsData) as Promise<any>).catch(
-            (e) => {
-              console.warn(
-                `${this.getLogPrefix()} - INIT: multicall failed, message: ${
-                  e.message
-                }`,
-              )
-              return undefined
-            },
-          )
-        : await this.client.multicall(tickSpacingsData).catch((e) => {
-            console.warn(
-              `${this.getLogPrefix()} - INIT: multicall failed, message: ${
-                e.message
-              }`,
-            )
-            return undefined
-          })
-    } catch (_error) {}
-
-    const existingPools: V3Pool[] = []
+    const existingPools: RainV3Pool[] = []
 
     staticPools.forEach((pool, i) => {
-      if (globalState === undefined || !globalState[i]) return
-      let thisPoolTickSpacing = this.DEFAULT_TICK_SPACING
-      if (poolsTickSpacing !== undefined && Array.isArray(poolsTickSpacing)) {
-        if (poolsTickSpacing[i] !== undefined) {
-          const ts = poolsTickSpacing[i]
-          if (typeof ts === 'number') {
-            thisPoolTickSpacing = ts
-          } else {
-            if (ts?.status === 'success') {
-              thisPoolTickSpacing = ts.result
-            }
+      const poolAddress = pool.address.toLowerCase()
+      if (this.pools.has(poolAddress)) return
+      if (this.nonExistentPools.get(poolAddress) ?? 0 > 1) return
+      if (globalState === undefined || !globalState[i]) {
+        this.handleNonExistentPool(poolAddress)
+        return
+      }
+      let tickSpacing = this.DEFAULT_TICK_SPACING
+      if (tickSpacings?.[i] !== undefined) {
+        const ts = tickSpacings[i]
+        if (typeof ts === 'number') {
+          tickSpacing = ts
+        } else {
+          if (ts?.status === 'success') {
+            tickSpacing = ts.result
           }
         }
       }
       const sqrtPriceX96 = globalState[i]!.result?.[0] // price
       const tick = globalState[i]!.result?.[1] // tick
-      if (!sqrtPriceX96 || sqrtPriceX96 === 0n || typeof tick !== 'number')
+      if (!sqrtPriceX96 || sqrtPriceX96 === 0n || typeof tick !== 'number') {
+        this.handleNonExistentPool(poolAddress)
         return
+      }
       const fee = globalState[i]!.result?.[2] // fee
-      if (!fee) return
-      const activeTick =
-        Math.floor(tick / thisPoolTickSpacing) * thisPoolTickSpacing
-      if (typeof activeTick !== 'number') return
-      this.TICK_SPACINGS[pool.address.toLowerCase()] = thisPoolTickSpacing
+      if (!fee) {
+        this.handleNonExistentPool(poolAddress)
+        return
+      }
+      const activeTick = this.getActiveTick(tick, tickSpacing)
+      if (typeof activeTick !== 'number') {
+        this.handleNonExistentPool(poolAddress)
+        return
+      }
       existingPools.push({
         ...pool,
         fee,
         sqrtPriceX96,
         activeTick,
+        tickSpacing,
+        ticks: new Map(),
+        reserve0: 0n,
+        reserve1: 0n,
+        liquidity: 0n,
+        blockNumber: options?.blockNumber ?? 0n,
       })
     })
 
     return existingPools
-  }
-
-  override getIndexes(existingPools: V3Pool[]): [number[], number[]] {
-    const minIndexes = existingPools.map((pool) =>
-      bitmapIndex(
-        pool.activeTick - NUMBER_OF_SURROUNDING_TICKS,
-        this.TICK_SPACINGS[pool.address.toLowerCase()]!,
-      ),
-    )
-    const maxIndexes = existingPools.map((pool) =>
-      bitmapIndex(
-        pool.activeTick + NUMBER_OF_SURROUNDING_TICKS,
-        this.TICK_SPACINGS[pool.address.toLowerCase()]!,
-      ),
-    )
-    return [minIndexes, maxIndexes]
-  }
-
-  override handleTickBoundries(
-    i: number,
-    pool: V3Pool,
-    poolTicks: {
-      index: number
-      DLiquidity: bigint
-    }[],
-    minIndexes: number[],
-    maxIndexes: number[],
-  ) {
-    const lowerUnknownTick =
-      minIndexes[i]! * this.TICK_SPACINGS[pool.address.toLowerCase()]! * 256 -
-      this.TICK_SPACINGS[pool.address.toLowerCase()]!
-    console.assert(
-      poolTicks.length === 0 || lowerUnknownTick < poolTicks[0]!.index,
-      'Error 236: unexpected min tick index',
-    )
-    poolTicks.unshift({
-      index: lowerUnknownTick,
-      DLiquidity: 0n,
-    })
-    const upperUnknownTick =
-      (maxIndexes[i]! + 1) *
-      this.TICK_SPACINGS[pool.address.toLowerCase()]! *
-      256
-    console.assert(
-      poolTicks[poolTicks.length - 1]!.index < upperUnknownTick,
-      'Error 244: unexpected max tick index',
-    )
-    poolTicks.push({
-      index: upperUnknownTick,
-      DLiquidity: 0n,
-    })
   }
 
   override getStaticPools(t1: Token, t2: Token): StaticPoolUniV3[] {
@@ -298,6 +236,39 @@ export abstract class AlgebraV1BaseProvider extends UniswapV3BaseProvider {
   // algebra doesnt have the fee/ticks setup the same way univ3 has
   override async ensureFeeAndTicks(): Promise<boolean> {
     return true
+  }
+
+  // handle extra events that Algebra has
+  override otherEventCases(
+    log: Log,
+    event: Log<
+      bigint,
+      number,
+      boolean,
+      (typeof AlgebraEventsAbi)[number],
+      true,
+      typeof AlgebraEventsAbi,
+      (typeof AlgebraEventsAbi)[number]['name']
+    >,
+    pool: RainV3Pool,
+  ): void {
+    switch (event.eventName) {
+      case 'Fee': {
+        if (log.blockNumber! >= pool.blockNumber) {
+          pool.blockNumber = log.blockNumber!
+          pool.fee = event.args.fee
+        }
+        break
+      }
+      case 'TickSpacing': {
+        if (log.blockNumber! >= pool.blockNumber) {
+          pool.blockNumber = log.blockNumber!
+          pool.tickSpacing = event.args.newTickSpacing
+        }
+        break
+      }
+      default:
+    }
   }
 }
 
